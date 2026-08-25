@@ -1,4 +1,3 @@
-import asyncio
 import json
 import os
 import time
@@ -8,6 +7,7 @@ from threading import Thread
 from uuid import uuid4
 
 from flask import Flask, jsonify, request
+
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -15,23 +15,39 @@ from telegram import (
     Update,
     WebAppInfo,
 )
+
 from telegram.ext import (
     Application,
     CommandHandler,
     ContextTypes,
     PreCheckoutQueryHandler,
-    MessageHandler,
-    filters,
 )
+
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
 WEB_APP_URL = os.environ.get("WEB_APP_URL", "").strip()
-FIREBASE_DATABASE_URL = os.environ.get("FIREBASE_DATABASE_URL", "").rstrip("/")
-ADMIN_CHAT_ID = int(os.environ.get("ADMIN_CHAT_ID", "0") or 0)
-PORT = int(os.environ.get("PORT", "10000"))
+FIREBASE_DATABASE_URL = os.environ.get(
+    "FIREBASE_DATABASE_URL",
+    ""
+).rstrip("/")
+
+ADMIN_CHAT_ID = int(
+    os.environ.get(
+        "ADMIN_CHAT_ID",
+        "0"
+    ) or 0
+)
+
+PORT = int(
+    os.environ.get(
+        "PORT",
+        "10000"
+    )
+)
 
 STAR_PRICE = 50
 STAR_POINTS = 5_000_000
+
 
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN is not set")
@@ -42,132 +58,205 @@ if not WEB_APP_URL:
 if not FIREBASE_DATABASE_URL:
     raise RuntimeError("FIREBASE_DATABASE_URL is not set")
 
+
 web = Flask(__name__)
 
 
 def firebase_url(path: str) -> str:
     encoded = "/".join(
-        urllib.parse.quote(part, safe="")
+        urllib.parse.quote(
+            part,
+            safe=""
+        )
         for part in path.strip("/").split("/")
     )
-    return f"{FIREBASE_DATABASE_URL}/{encoded}.json"
+
+    return (
+        f"{FIREBASE_DATABASE_URL}"
+        f"/{encoded}.json"
+    )
 
 
 def firebase_get(path: str):
-    req = urllib.request.Request(
+    request_obj = urllib.request.Request(
         firebase_url(path),
-        method="GET",
+        method="GET"
     )
 
-    with urllib.request.urlopen(req, timeout=10) as response:
-        raw = response.read().decode("utf-8")
-        return json.loads(raw) if raw else None
+    with urllib.request.urlopen(
+        request_obj,
+        timeout=10
+    ) as response:
+
+        raw = (
+            response
+            .read()
+            .decode("utf-8")
+        )
+
+        return (
+            json.loads(raw)
+            if raw
+            else None
+        )
 
 
-def firebase_put(path: str, data) -> None:
-    body = json.dumps(data).encode("utf-8")
+def firebase_put(
+    path: str,
+    data
+) -> None:
 
-    req = urllib.request.Request(
+    body = json.dumps(
+        data
+    ).encode("utf-8")
+
+    request_obj = urllib.request.Request(
         firebase_url(path),
         data=body,
         method="PUT",
         headers={
-            "Content-Type": "application/json",
-        },
+            "Content-Type":
+                "application/json"
+        }
     )
 
-    with urllib.request.urlopen(req, timeout=10) as response:
+    with urllib.request.urlopen(
+        request_obj,
+        timeout=10
+    ) as response:
+
         response.read()
 
 
-def telegram_api(method: str, data: dict):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/{method}"
+def telegram_api(
+    method: str,
+    data: dict
+):
 
-    body = json.dumps(data).encode("utf-8")
+    url = (
+        "https://api.telegram.org/"
+        f"bot{BOT_TOKEN}/{method}"
+    )
 
-    req = urllib.request.Request(
+    body = json.dumps(
+        data
+    ).encode("utf-8")
+
+    request_obj = urllib.request.Request(
         url,
         data=body,
         method="POST",
         headers={
-            "Content-Type": "application/json",
-        },
+            "Content-Type":
+                "application/json"
+        }
     )
 
-    with urllib.request.urlopen(req, timeout=15) as response:
+    with urllib.request.urlopen(
+        request_obj,
+        timeout=15
+    ) as response:
+
         return json.loads(
-            response.read().decode("utf-8")
+            response
+            .read()
+            .decode("utf-8")
         )
 
 
 @web.after_request
-def cors(response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+def add_cors(response):
+
+    response.headers[
+        "Access-Control-Allow-Origin"
+    ] = "*"
+
+    response.headers[
+        "Access-Control-Allow-Methods"
+    ] = "GET, OPTIONS"
+
+    response.headers[
+        "Access-Control-Allow-Headers"
+    ] = "Content-Type"
+
     return response
 
 
 @web.get("/healthz")
 def healthz():
+
     return jsonify({
         "ok": True,
-        "service": "JuugTAPS",
+        "service": "JuugTAPS"
     })
 
 
 @web.get("/bot-info")
 def bot_info():
+
     try:
-        result = telegram_api(
-            "getMe",
-            {},
-        )
+
+        result =
+            telegram_api(
+                "getMe",
+                {}
+            )
 
         if not result.get("ok"):
+
             return jsonify({
-                "error": result.get(
-                    "description",
-                    "Telegram error",
-                )
+                "error":
+                    result.get(
+                        "description",
+                        "Telegram error"
+                    )
             }), 500
 
         return jsonify({
-            "username": result["result"].get(
-                "username",
-                "",
-            )
+            "username":
+                result["result"].get(
+                    "username",
+                    ""
+                )
         })
 
     except Exception as exc:
+
         print(
             "BOT INFO ERROR:",
             repr(exc),
-            flush=True,
+            flush=True
         )
 
         return jsonify({
             "error":
-                "bot info unavailable",
+                "bot info unavailable"
         }), 500
 
 
 @web.get("/create-invoice")
 def create_invoice():
+
     raw_user_id = (
         request
         .args
-        .get("user_id", "")
+        .get(
+            "user_id",
+            ""
+        )
         .strip()
     )
 
     if not raw_user_id.isdigit():
+
         return jsonify({
             "error":
-                "invalid user_id",
+                "invalid user_id"
         }), 400
 
-    user_id = int(raw_user_id)
+    user_id = int(
+        raw_user_id
+    )
 
     payload = (
         f"stars_5m:"
@@ -176,6 +265,7 @@ def create_invoice():
     )
 
     try:
+
         result = telegram_api(
             "createInvoiceLink",
             {
@@ -197,77 +287,81 @@ def create_invoice():
                             "5,000,000 points",
 
                         "amount":
-                            STAR_PRICE,
+                            STAR_PRICE
                     }
-                ],
-            },
+                ]
+            }
         )
 
         if not result.get("ok"):
+
             return jsonify({
-                "error": result.get(
-                    "description",
-                    "Telegram error",
-                )
+                "error":
+                    result.get(
+                        "description",
+                        "Telegram error"
+                    )
             }), 500
 
         return jsonify({
             "url":
-                result["result"],
+                result["result"]
         })
 
     except Exception as exc:
+
         print(
             "INVOICE ERROR:",
             repr(exc),
-            flush=True,
+            flush=True
         )
 
         return jsonify({
             "error":
-                "could not create invoice",
+                "could not create invoice"
         }), 500
 
 
 def run_web():
+
     web.run(
         host="0.0.0.0",
         port=PORT,
-        use_reloader=False,
+        use_reloader=False
     )
 
 
 async def send_game(
     update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
+    context: ContextTypes.DEFAULT_TYPE
 ):
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(
-                "🎮 PLAY JUUGTAPS",
-                web_app=WebAppInfo(
-                    url=WEB_APP_URL,
-                ),
-            )
-        ]
-    ])
+
+    keyboard =
+        InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "🎮 PLAY JUUGTAPS",
+                    web_app=WebAppInfo(
+                        url=WEB_APP_URL
+                    )
+                )
+            ]
+        ])
 
     await update.effective_message.reply_text(
         "🎮 JuugTAPS\n\n"
         "Нажми кнопку ниже, чтобы открыть игру.",
-        reply_markup=keyboard,
+        reply_markup=keyboard
     )
 
 
 async def send_invoice(
     update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
+    context: ContextTypes.DEFAULT_TYPE
 ):
-    user_id = (
-        update
-        .effective_user
-        .id
-    )
+
+    user_id =
+        update.effective_user.id
 
     payload = (
         f"stars_5m:"
@@ -294,43 +388,45 @@ async def send_invoice(
         prices=[
             LabeledPrice(
                 "5,000,000 points",
-                STAR_PRICE,
+                STAR_PRICE
             )
-        ],
+        ]
     )
 
 
 async def start(
     update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
+    context: ContextTypes.DEFAULT_TYPE
 ):
-    arg = (
+
+    argument = (
         context.args[0].strip()
         if context.args
         else ""
     )
 
-    if arg == "buy5m":
+    if argument == "buy5m":
+
         await send_invoice(
             update,
-            context,
+            context
         )
+
         return
 
     await send_game(
         update,
-        context,
+        context
     )
 
 
 async def pre_checkout(
     update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
+    context: ContextTypes.DEFAULT_TYPE
 ):
-    query = (
-        update
-        .pre_checkout_query
-    )
+
+    query =
+        update.pre_checkout_query
 
     payload = (
         query.invoice_payload
@@ -342,30 +438,33 @@ async def pre_checkout(
         and
         query.total_amount == STAR_PRICE
         and
-        payload.startswith("stars_5m:")
+        payload.startswith(
+            "stars_5m:"
+        )
     )
 
     if not valid:
+
         await query.answer(
             ok=False,
             error_message=
-                "Invalid JuugTAPS order",
+                "Invalid JuugTAPS order"
         )
+
         return
 
     await query.answer(
-        ok=True,
+        ok=True
     )
 
 
 async def successful_payment(
     update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
+    context: ContextTypes.DEFAULT_TYPE
 ):
-    message = (
-        update
-        .effective_message
-    )
+
+    message =
+        update.effective_message
 
     payment = (
         message.successful_payment
@@ -383,40 +482,38 @@ async def successful_payment(
     ):
         return
 
-    user_id = (
-        update
-        .effective_user
-        .id
-    )
+    user_id =
+        update.effective_user.id
 
-    charge_id = (
-        payment
-        .telegram_payment_charge_id
-    )
+    charge_id =
+        payment.telegram_payment_charge_id
 
-    payload = (
-        payment.invoice_payload
-        or ""
-    )
+    payload =
+        payment.invoice_payload or ""
 
     if not payload.startswith(
         f"stars_5m:{user_id}:"
     ):
         return
 
-    payment_path = (
+    payment_path =
         f"payments/{charge_id}"
-    )
 
-    if firebase_get(payment_path):
+    if firebase_get(
+        payment_path
+    ):
+
         await message.reply_text(
             "✅ Оплата уже обработана."
         )
+
         return
 
-    now_ms = int(
-        time.time() * 1000
-    )
+    now_ms =
+        int(
+            time.time() *
+            1000
+        )
 
     firebase_put(
         payment_path,
@@ -440,13 +537,12 @@ async def successful_payment(
                 charge_id,
 
             "createdAt":
-                now_ms,
-        },
+                now_ms
+        }
     )
 
     firebase_put(
-        f"users/{user_id}/pendingStars/"
-        f"{charge_id}",
+        f"users/{user_id}/pendingStars/{charge_id}",
         {
             "points":
                 STAR_POINTS,
@@ -458,11 +554,12 @@ async def successful_payment(
                 False,
 
             "createdAt":
-                now_ms,
-        },
+                now_ms
+        }
     )
 
     if ADMIN_CHAT_ID:
+
         username = (
             update
             .effective_user
@@ -472,6 +569,7 @@ async def successful_payment(
         )
 
         try:
+
             await context.bot.send_message(
                 chat_id=
                     ADMIN_CHAT_ID,
@@ -484,15 +582,16 @@ async def successful_payment(
                     f"Товар: {STAR_POINTS:,} очков"
                 ).replace(
                     ",",
-                    " ",
-                ),
+                    " "
+                )
             )
 
         except Exception as exc:
+
             print(
                 "ADMIN NOTIFY ERROR:",
                 repr(exc),
-                flush=True,
+                flush=True
             )
 
     await message.reply_text(
@@ -504,8 +603,9 @@ async def successful_payment(
 
 async def paysupport(
     update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
+    context: ContextTypes.DEFAULT_TYPE
 ):
+
     await update.effective_message.reply_text(
         "По вопросам покупки JuugTAPS "
         "обратитесь к администратору игры."
@@ -513,9 +613,10 @@ async def paysupport(
 
 
 def main():
+
     Thread(
         target=run_web,
-        daemon=True,
+        daemon=True
     ).start()
 
     application = (
@@ -528,33 +629,33 @@ def main():
     application.add_handler(
         CommandHandler(
             "start",
-            start,
+            start
         )
     )
 
     application.add_handler(
         CommandHandler(
             "paysupport",
-            paysupport,
+            paysupport
         )
     )
 
     application.add_handler(
         PreCheckoutQueryHandler(
-            pre_checkout,
+            pre_checkout
         )
     )
 
     application.add_handler(
         MessageHandler(
             filters.SUCCESSFUL_PAYMENT,
-            successful_payment,
+            successful_payment
         )
     )
 
     print(
         "JuugTAPS bot is running",
-        flush=True,
+        flush=True
     )
 
     application.run_polling(
